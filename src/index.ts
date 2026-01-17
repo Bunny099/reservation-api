@@ -1,6 +1,7 @@
 import express, { json } from "express";
-import { prisma } from "../lib/db"
+import { prisma } from "../lib/db";
 import cors from "cors";
+import { Prisma } from "../src/generated/prisma/client";
 
 const app = express();
 app.use(cors());
@@ -8,28 +9,29 @@ app.use(json());
 
 //room Post/
 app.post("/rooms", async (req, res) => {
-
     try {
         const { name, capacity } = req.body;
         if (!name || !capacity) {
-            return res.status(400).json({ message: "All fields are required!" })
+            return res.status(400).json({ message: "All fields are required!" });
         }
         if (capacity <= 0) {
-            return res.status(400).json({ message: "Invalid value!" })
+            return res.status(400).json({ message: "Invalid value!" });
         }
         let response = await prisma.room.create({
             data: {
-                name, capacity
-            }
-        })
+                name,
+                capacity,
+            },
+        });
         if (!response) {
-            return res.status(403).json({ message: "Failed at db creation!" })
+            return res.status(403).json({ message: "Failed at db creation!" });
         }
-        return res.status(201).json({ response, message: "Success room created!" })
+        return res.status(201).json({ response, message: "Success room created!" });
     } catch (e) {
-        return res.status(500).json({ message: "Server error while room creating!" })
+        return res
+            .status(500)
+            .json({ message: "Server error while room creating!" });
     }
-
 });
 //room Get/ get by id only active onces
 app.get("/rooms/:id", async (req, res) => {
@@ -40,30 +42,97 @@ app.get("/rooms/:id", async (req, res) => {
         let today = new Date();
         const id = req.params.id;
         if (!id) {
-            return res.status(400).json({ message: "Id field is missing!" })
+            return res.status(400).json({ message: "Id field is missing!" });
         }
         let response = await prisma.room.findFirst({ where: { id } });
         if (!response) {
-            return res.status(404).json({ message: "No Data Found!" })
+            return res.status(404).json({ message: "No Data Found!" });
         }
-        let reservData = await prisma.reservation.findMany({ where: { roomId: id } })
+        let reservData = await prisma.reservation.findMany({
+            where: { roomId: id },
+        });
         reservData.forEach((e) => {
             if (e.status === "ACTIVE" && e.expiresAt > today) {
-                reserved = reserved + 1
+                reserved = reserved + 1;
             }
             return reserved;
-        })
+        });
         if (reserved <= response.capacity) {
             available = response.capacity - reserved;
             capacity = response.capacity;
-            return res.status(202).json({ data: { roomId: id, available: available, capacity: capacity, reserved: reserved }, message: "room stats!" })
+            return res
+                .status(202)
+                .json({
+                    data: {
+                        roomId: id,
+                        available: available,
+                        capacity: capacity,
+                        reserved: reserved,
+                    },
+                    message: "room stats!",
+                });
         }
-
     } catch (e) {
-        return res.status(500).json({ message: "Server error!" })
+        return res.status(500).json({ message: "Server error!" });
     }
 });
 
+app.post("/reservation", async (req, res) => {
+    try {
+        let { roomId } = req.body;
+        let currentDay = new Date();
+        let min = 5;
+        let expiry = new Date(currentDay.getTime() + min * 60000);
+        if (!roomId) {
+            return res.status(400).json({ message: "Field is missing!" });
+        }
+        const result = await prisma.$transaction(
+            async (tx) => {
+                let count = 0;
+                let today = new Date();
+                let r = await tx.room.findFirst({ where: { id: roomId } });
+                let c = await tx.reservation.findMany({ where: { roomId } });
+                c.forEach((e) => {
+                    if (e.status === "ACTIVE" && e.expiresAt > today) {
+                        count = count + 1;
+                    }
+                    return count;
+                });
+                if (!r || r === null || r === undefined) {
+                    return "ROOM_NOT_FOUND"
+
+                }
+                else if (count < r?.capacity!) {
+                    await tx.reservation.create({
+                        data: { roomId, expiresAt: expiry },
+                    });
+                    return "BOOKED"
+
+                }
+                else if (count >= r?.capacity!) {
+                    return "FULLED"
+
+                }
+            },
+            {
+                isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+                maxWait: 5000,
+                timeout: 10000,
+            }
+        );
+
+        if (result === "ROOM_NOT_FOUND") {
+            return res.status(400).json({ message: "Room Not Found!" })
+        } else if (result === "BOOKED") {
+            return res.status(200).json({ message: "Reservation Success!" })
+        } else if (result === "FULLED") {
+            return res.status(401).json({ message: "Room is fulled!" })
+        }
+
+    } catch (e) {
+        return res.status(500).json({ message: "server error!" });
+    }
+});
 
 
 

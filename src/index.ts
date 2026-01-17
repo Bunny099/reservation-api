@@ -61,7 +61,7 @@ app.get("/rooms/:id", async (req, res) => {
             available = response.capacity - reserved;
             capacity = response.capacity;
             return res
-                .status(202)
+                .status(200)
                 .json({
                     data: {
                         roomId: id,
@@ -122,11 +122,11 @@ app.post("/reservation", async (req, res) => {
         );
 
         if (result === "ROOM_NOT_FOUND") {
-            return res.status(400).json({ message: "Room Not Found!" })
+            return res.status(404).json({ message: "Room Not Found!" })
         } else if (result === "BOOKED") {
             return res.status(200).json({ message: "Reservation Success!" })
         } else if (result === "FULLED") {
-            return res.status(401).json({ message: "Room is fulled!" })
+            return res.status(409).json({ message: "Room is fulled!" })
         }
 
     } catch (e) {
@@ -134,6 +134,31 @@ app.post("/reservation", async (req, res) => {
     }
 });
 
-
+app.delete("/reservation/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        let response;
+        if (!id) {
+            return res.status(400).json({ message: "Field is missing!" });
+        }
+        let reserved = await prisma.reservation.findFirst({ where: { id } });
+        if (!reserved) {
+            return res.status(404).json({ message: "No reservations found!" });
+        }
+        if (reserved?.status === "ACTIVE") {
+            response = await prisma.reservation.update({
+                where: { id },
+                data: { status: "CANCELLED" },
+            });
+        }
+        if(reserved.status === "CANCELLED" || reserved.status === "EXPIRED"){
+            return res.status(200).json({message:"Success!"})
+        }
+        
+        return res.status(200).json({ response, message: "Bookings cancelled!" });
+    } catch (e) {
+        return res.status(500).json({ message: "server error!" });
+    }
+});
 
 app.listen(3000);

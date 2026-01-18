@@ -77,13 +77,46 @@ app.get("/rooms/:id", async (req, res) => {
     }
 });
 
+app.post("/user", async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name) {
+            return res.status(400).json({ message: "Field is missing!" })
+        }
+        let response = await prisma.user.create({ data: { name } });
+        if (!response) {
+            return res.status(403).json({ message: "Db creation failed!" })
+        }
+        return res.status(201).json({ response, message: "User created Success!" })
+    } catch (e) {
+        return res.status(500).json({ message: "Server error!" })
+    }
+
+})
+app.get("/users/:id/reservations", async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) {
+            return res.status(400).json({ message: "Field is missing!" })
+        }
+        let response = await prisma.reservation.findMany({ where: { userId: id } });
+        if (response.length===0) {
+            return res.status(200).json({ message: "No reservations found!" })
+        }
+        return res.status(200).json({ response, message: "Success Reservation found!" })
+
+    } catch (e) {
+        return res.status(500).json({ message: "Server error!" })
+    }
+})
+
 app.post("/reservation", async (req, res) => {
     try {
-        let { roomId } = req.body;
+        let { roomId,userId } = req.body;
         let currentDay = new Date();
         let min = 5;
         let expiry = new Date(currentDay.getTime() + min * 60000);
-        if (!roomId) {
+        if (!roomId || !userId) {
             return res.status(400).json({ message: "Field is missing!" });
         }
         const result = await prisma.$transaction(
@@ -104,7 +137,7 @@ app.post("/reservation", async (req, res) => {
                 }
                 else if (count < r?.capacity!) {
                     await tx.reservation.create({
-                        data: { roomId, expiresAt: expiry },
+                        data: { roomId,userId, expiresAt: expiry },
                     });
                     return "BOOKED"
 
@@ -137,13 +170,18 @@ app.post("/reservation", async (req, res) => {
 app.delete("/reservation/:id", async (req, res) => {
     try {
         const { id } = req.params;
+        const userId = req.header("X-Custom-Header");
         let response;
         if (!id) {
             return res.status(400).json({ message: "Field is missing!" });
         }
         let reserved = await prisma.reservation.findFirst({ where: { id } });
+
         if (!reserved) {
             return res.status(404).json({ message: "No reservations found!" });
+        }
+        if(reserved.userId !== userId){
+            return res.status(400).json({message:"Not found!"})
         }
         if (reserved?.status === "ACTIVE") {
             response = await prisma.reservation.update({
@@ -151,10 +189,10 @@ app.delete("/reservation/:id", async (req, res) => {
                 data: { status: "CANCELLED" },
             });
         }
-        if(reserved.status === "CANCELLED" || reserved.status === "EXPIRED"){
-            return res.status(200).json({message:"Success!"})
+        if (reserved.status === "CANCELLED" || reserved.status === "EXPIRED") {
+            return res.status(200).json({ message: "Success!" })
         }
-        
+
         return res.status(200).json({ response, message: "Bookings cancelled!" });
     } catch (e) {
         return res.status(500).json({ message: "server error!" });

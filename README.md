@@ -1,6 +1,6 @@
 # reservation-api
 
-A backend service for **room reservations with fixed capacity**.
+A backend service for room reservations with fixed capacity and user-based ownership.
 
 The system models a simple hotel booking flow where reservations are time-bound and **overbooking is never allowed**, even with concurrent requests.
 
@@ -13,6 +13,8 @@ The system models a simple hotel booking flow where reservations are time-bound 
 * Prevent reservations beyond capacity
 * Free capacity when reservations expire
 * Cancel reservations safely
+* Create users
+* Enforce reservation ownership (only the creator can cancel)
 
 ---
 
@@ -24,7 +26,15 @@ The system models a simple hotel booking flow where reservations are time-bound 
 All booking logic enforces this rule.
 
 ---
+## Ownership Rule
 
+> Every reservation belongs to exactly one user.
+> Only the user who created a reservation can cancel it.
+
+User identity is passed explicitly at the API level.
+(Authentication is intentionally out of scope.)
+
+---
 ## Tech Stack
 
 * **Bun**
@@ -38,10 +48,17 @@ Backend only. No auth, no UI, no background workers.
 
 ## API Routes
 
-* **POST `/rooms`** – create a room
-* **GET `/rooms/:id`** – get room availability
-* **POST `/reservation`** – create a reservation (concurrency-safe)
-* **DELETE `/reservation/:id`** – cancel a reservation (idempotent)
+### Rooms
+* POST `/rooms`
+* GET `/rooms/:id`
+
+### Users
+* POST `/user`
+* GET `/users/:id/reservations`
+
+### Reservations
+* POST `/reservation`
+* DELETE `/reservation/:id`
 
 ---
 
@@ -63,6 +80,7 @@ Reservations are never deleted.
 * Serializable transactions
 * Concurrency-safe booking
 * Idempotent delete with no-op success
+* Reservation ownership enforcement
 
 ---
 

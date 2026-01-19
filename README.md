@@ -2,55 +2,61 @@
 
 A backend service for room reservations with fixed capacity and user-based ownership.
 
-The system models a simple hotel booking flow where reservations are time-bound and **overbooking is never allowed**, even with concurrent requests.
+The system models a realistic hotel booking flow using temporary reservation holds and explicit confirmation, while preventing overbooking even under concurrent requests.
+
 
 ---
 
-## What it does
+## Features
 
-* Create rooms with a fixed capacity
-* Reserve a room slot for a limited time
-* Prevent reservations beyond capacity
-* Free capacity when reservations expire
-* Cancel reservations safely
-* Create users
-* Enforce reservation ownership (only the creator can cancel)
+- Create rooms with a fixed capacity
+- Create users
+- Temporarily hold a room slot (PENDING reservation)
+- Explicitly confirm reservations
+- Prevent overbooking with transactional guarantees
+- Cancel confirmed reservations safely
+- Enforce reservation ownership
 
 ---
 
-## Core Rule
 
-> ACTIVE and non-expired reservations
-> must never exceed room capacity.
+## Core Invariant
 
-All booking logic enforces this rule.
+> The number of confirmed reservations for a room must never exceed the room’s capacity.
+
+>This invariant is enforced using transactional checks during reservation confirmation.
+
+---
+
+## Reservation Lifecycle
+```
+PENDING → CONFIRM
+PENDING → EXPIRED
+CONFIRM → CANCELLED
+```
+- `PENDING` represents a temporary hold with an expiry time
+- Only `CONFIRM` reservations consume room capacity
+- Expired reservations can never be confirmed
+- Reservations are never deleted
+
 
 ---
 ## Ownership Rule
 
 > Every reservation belongs to exactly one user.
-> Only the user who created a reservation can cancel it.
+> Only the user who created a reservation can confirm or cancel it.
 
 User identity is passed explicitly at the API level.
 (Authentication is intentionally out of scope.)
 
 ---
-## Tech Stack
 
-* **Bun**
-* Express
-* Prisma
-* PostgreSQL
-
-Backend only. No auth, no UI, no background workers.
-
----
 
 ## API Routes
 
 ### Rooms
 * POST `/rooms`
-* GET `/rooms/:id`
+* GET `/rooms/:id/availability`
 
 ### Users
 * POST `/user`
@@ -58,29 +64,19 @@ Backend only. No auth, no UI, no background workers.
 
 ### Reservations
 * POST `/reservation`
-* DELETE `/reservation/:id`
+* POST `/reservation/:id/confirm`
+* POST `/reservation/:id/cancel`
 
 ---
 
-## Reservation States
+## Tech Stack
 
-```
-ACTIVE → CANCELLED
-ACTIVE → EXPIRED
-```
+* **Bun**
+* Express
+* Prisma
+* PostgreSQL
 
-Reservations are never deleted.
-
----
-
-## Key Backend Concepts Used
-
-* Capacity invariants
-* Derived availability
-* Serializable transactions
-* Concurrency-safe booking
-* Idempotent delete with no-op success
-* Reservation ownership enforcement
+Backend only. No authentication, idempotency keys, UI, or background workers.
 
 ---
 

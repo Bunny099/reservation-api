@@ -24,7 +24,8 @@ model Room {
 }
 
 enum STATUS {
-  ACTIVE
+  PENDING
+  CONFIRM
   EXPIRED
   CANCELLED
 }
@@ -35,7 +36,7 @@ model Reservation {
   room      Room     @relation(fields: [roomId], references: [id])
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  status    STATUS   @default(ACTIVE)
+  status    STATUS   @default(PENDING)
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
